@@ -44,7 +44,7 @@ def fetch_data(ticker, period):
 # Exchange Rate (EUR → INR)
 # -------------------------
 # Replace the value below with the live rate pulled earlier
-EUR_INR =  ((EUR → INR))  # use the widget result here
+EUR_INR =  (106.97)  # use the widget result here
 
 # -------------------------
 # Load Data
