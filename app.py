@@ -44,7 +44,6 @@ def fetch_data(ticker, period):
 # Exchange Rate (EUR → INR)
 # -------------------------
 # Replace the value below with the live rate pulled earlier
-EUR_INR =  106.97  # use the widget result here
 
 # -------------------------
 # Load Data
@@ -60,7 +59,7 @@ try:
 
     # Convert AkzoNobel prices to INR
     hist_akzo_inr = hist_akzo.copy()
-    hist_akzo_inr["Close"] = hist_akzo["Close"] * EUR_INR
+    hist_akzo_inr["Close"] = hist_akzo["Close"] *106.79
 
     norm_asian = hist_asian["Close"] / hist_asian["Close"].iloc[0]
     norm_akzo = hist_akzo_inr["Close"] / hist_akzo_inr["Close"].iloc[0]
