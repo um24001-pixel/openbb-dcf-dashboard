@@ -4,142 +4,159 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 
+# -------------------------
+# Custom Styles
+# -------------------------
+st.markdown("""
+<style>
+.big-font {
+    font-size:22px !important;
+    font-weight:700;
+}
+.metric-green {
+    color: #00B050;
+}
+.metric-red {
+    color: #FF0000;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.set_page_config(layout="wide")
-st.title("📊 Dynamic Competitive Equity Dashboard")
+st.title("📊 Equity Research Dashboard: Asian Paints vs AkzoNobel")
 
 # -------------------------
-# Ticker Inputs
+# Select Timeframe
 # -------------------------
-col1, col2 = st.columns(2)
-
-with col1:
-    ticker1 = st.text_input("Company A", "TCS.NS")
-
-with col2:
-    ticker2 = st.text_input("Company B", "INFY.NS")
+timeframe = st.selectbox("Select Timeframe for Price Charts", ["6mo", "1y", "3y", "5y"])
 
 # -------------------------
-# Data Fetch Function
+# Fetch Data Function
 # -------------------------
 @st.cache_data
-def fetch_data(ticker):
+def fetch_data(ticker, period):
     stock = yf.Ticker(ticker)
     info = stock.info
-    hist_1y = stock.history(period="1y")
-    hist_3y = stock.history(period="3y")
-    return info, hist_1y, hist_3y
+    hist = stock.history(period=period)
+    return info, hist
 
+# -------------------------
+# Exchange Rate (EUR → INR)
+# -------------------------
+# Replace the value below with the live rate pulled earlier
+EUR_INR =  ((EUR → INR))  # use the widget result here
+
+# -------------------------
+# Load Data
+# -------------------------
 try:
-    info1, hist1_1y, hist1_3y = fetch_data(ticker1)
-    info2, hist2_1y, hist2_3y = fetch_data(ticker2)
+    info_asian, hist_asian = fetch_data("ASIANPAINT.NS", timeframe)
+    info_akzo, hist_akzo = fetch_data("AKZOY.NS", timeframe)
 
-    # =============================
-    # 1️⃣ Normalized Price Chart
-    # =============================
-    st.subheader("📈 Normalized 1-Year Price Comparison")
+    # -------------------------
+    # Normalized Price Comparison
+    # -------------------------
+    st.subheader("📈 Normalized Price Comparison (INR Adjusted)")
 
-    norm1 = hist1_1y["Close"] / hist1_1y["Close"].iloc[0]
-    norm2 = hist2_1y["Close"] / hist2_1y["Close"].iloc[0]
+    # Convert AkzoNobel prices to INR
+    hist_akzo_inr = hist_akzo.copy()
+    hist_akzo_inr["Close"] = hist_akzo["Close"] * EUR_INR
+
+    norm_asian = hist_asian["Close"] / hist_asian["Close"].iloc[0]
+    norm_akzo = hist_akzo_inr["Close"] / hist_akzo_inr["Close"].iloc[0]
 
     fig_norm = go.Figure()
-    fig_norm.add_trace(go.Scatter(x=hist1_1y.index, y=norm1, name=ticker1))
-    fig_norm.add_trace(go.Scatter(x=hist2_1y.index, y=norm2, name=ticker2))
+    fig_norm.add_trace(go.Scatter(x=hist_asian.index, y=norm_asian, name="Asian Paints"))
+    fig_norm.add_trace(go.Scatter(x=hist_akzo.index, y=norm_akzo, name="AkzoNobel (INR)"))
     fig_norm.update_layout(title="Normalized Price (Base = 1)")
 
     st.plotly_chart(fig_norm, use_container_width=True)
 
-    # =============================
-    # 2️⃣ Valuation Premium %
-    # =============================
-    st.subheader("📊 Valuation Premium / Discount")
+    # -------------------------
+    # Market Metrics
+    # -------------------------
+    st.subheader("📊 Market & Valuation Metrics")
 
-    pe1 = info1.get("trailingPE")
-    pe2 = info2.get("trailingPE")
+    pe_asian = info_asian.get("trailingPE")
+    pe_akzo = info_akzo.get("trailingPE")
+    pb_asian = info_asian.get("priceToBook")
+    pb_akzo = info_akzo.get("priceToBook")
 
-    if pe1 and pe2:
-        premium = ((pe1 / pe2) - 1) * 100
-        st.metric("P/E Premium (%)", f"{premium:.2f}%")
-    else:
-        st.write("P/E data not available.")
+    premium_pe = ((pe_asian / pe_akzo) - 1) * 100 if pe_asian and pe_akzo else None
+    premium_pb = ((pb_asian / pb_akzo) - 1) * 100 if pb_asian and pb_akzo else None
 
-    # =============================
-    # 3️⃣ 3-Year CAGR
-    # =============================
-    st.subheader("📉 3-Year CAGR Comparison")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("P/E Premium %", f"{premium_pe:.2f}%" if premium_pe else "N/A")
+    c2.metric("P/B Premium %", f"{premium_pb:.2f}%" if premium_pb else "N/A")
+    c3.metric("Asian Paints P/E", f"{pe_asian:.2f}")
+    c4.metric("AkzoNobel P/E", f"{pe_akzo:.2f}")
 
-    def calculate_cagr(hist):
+    # -------------------------
+    # 3-Year CAGR
+    # -------------------------
+    def calc_cagr(hist):
         start = hist["Close"].iloc[0]
         end = hist["Close"].iloc[-1]
-        years = 3
+        years = {"6mo": 0.5, "1y":1, "3y":3, "5y":5}[timeframe]
         return ((end / start) ** (1/years) - 1) * 100
 
-    cagr1 = calculate_cagr(hist1_3y)
-    cagr2 = calculate_cagr(hist2_3y)
+    cagr_asian = calc_cagr(hist_asian)
+    cagr_akzo = calc_cagr(hist_akzo_inr)
 
-    col3, col4 = st.columns(2)
-    col3.metric(f"{ticker1} 3Y CAGR", f"{cagr1:.2f}%")
-    col4.metric(f"{ticker2} 3Y CAGR", f"{cagr2:.2f}%")
+    st.subheader("📈 CAGR Comparison")
+    cg1, cg2 = st.columns(2)
+    cg1.metric("Asian Paints CAGR", f"{cagr_asian:.2f}%")
+    cg2.metric("AkzoNobel CAGR (INR)", f"{cagr_akzo:.2f}%")
 
-    # =============================
-    # 4️⃣ Market Cap Comparison
-    # =============================
+    # -------------------------
+    # Rolling Volatility
+    # -------------------------
+    st.subheader("📉 Risk Metrics")
+
+    hist_asian["Return"] = hist_asian["Close"].pct_change()
+    hist_akzo_inr["Return"] = hist_akzo_inr["Close"].pct_change()
+
+    vol_asian = hist_asian["Return"].std() * np.sqrt(252) * 100
+    vol_akzo = hist_akzo_inr["Return"].std() * np.sqrt(252) * 100
+
+    sr_asian = ((cagr_asian/100) - 0.05) / (vol_asian/100) if vol_asian else None
+    sr_akzo = ((cagr_akzo/100) - 0.05) / (vol_akzo/100) if vol_akzo else None
+
+    rv1, rv2 = st.columns(2)
+    rv1.metric("Volatility (%) - Asian", f"{vol_asian:.2f}")
+    rv2.metric("Volatility (%) - Akzo", f"{vol_akzo:.2f}")
+
+    sr1, sr2 = st.columns(2)
+    sr1.metric("Sharpe Ratio - Asian", f"{sr_asian:.2f}" if sr_asian else "N/A")
+    sr2.metric("Sharpe Ratio - Akzo", f"{sr_akzo:.2f}" if sr_akzo else "N/A")
+
+    # -------------------------
+    # Market Cap Comparison
+    # -------------------------
     st.subheader("🏢 Market Cap Comparison")
 
-    mc1 = info1.get("marketCap")
-    mc2 = info2.get("marketCap")
+    mc_asian = info_asian.get("marketCap")
+    mc_akzo = info_akzo.get("marketCap") * EUR_INR
 
     mc_df = pd.DataFrame({
-        "Company": [ticker1, ticker2],
-        "Market Cap": [mc1, mc2]
+        "Company": ["Asian Paints","AkzoNobel (INR)"],
+        "Market Cap": [mc_asian, mc_akzo]
     })
 
     fig_mc = go.Figure()
-    fig_mc.add_trace(go.Bar(
-        x=mc_df["Company"],
-        y=mc_df["Market Cap"]
-    ))
-
-    fig_mc.update_layout(title="Market Capitalization")
+    fig_mc.add_trace(go.Bar(x=mc_df["Company"], y=mc_df["Market Cap"]))
+    fig_mc.update_layout(title="Market Cap (INR)")
 
     st.plotly_chart(fig_mc, use_container_width=True)
 
-    # =============================
-    # 5️⃣ Sector Comparison
-    # =============================
+    # -------------------------
+    # Sector Comparison
+    # -------------------------
     st.subheader("🏭 Sector Comparison")
-
-    sector1 = info1.get("sector")
-    sector2 = info2.get("sector")
-
-    sector_df = pd.DataFrame({
-        "Company": [ticker1, ticker2],
-        "Sector": [sector1, sector2]
-    })
-
-    st.table(sector_df)
-
-    # =============================
-    # 6️⃣ Full Metrics Table
-    # =============================
-    st.subheader("📋 Key Financial Metrics")
-
-    df_metrics = pd.DataFrame({
-        "Metric": ["P/E", "P/B", "ROE", "Revenue Growth"],
-        ticker1: [
-            info1.get("trailingPE"),
-            info1.get("priceToBook"),
-            info1.get("returnOnEquity"),
-            info1.get("revenueGrowth")
-        ],
-        ticker2: [
-            info2.get("trailingPE"),
-            info2.get("priceToBook"),
-            info2.get("returnOnEquity"),
-            info2.get("revenueGrowth")
-        ]
-    })
-
-    st.dataframe(df_metrics)
+    st.table(pd.DataFrame({
+        "Company": ["Asian Paints", "AkzoNobel"],
+        "Sector": [info_asian.get("sector"), info_akzo.get("sector")]
+    }))
 
 except Exception as e:
-    st.error("Error fetching data. Please check ticker symbols.")
+    st.error("Error fetching data — check ticker symbols or API connection.")
