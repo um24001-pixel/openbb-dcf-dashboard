@@ -1,111 +1,53 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.express as px
-from openbb import obb
 import yfinance as yf
+import pandas as pd
+import plotly.graph_objects as go
 
-st.set_page_config(layout="wide")
-st.title("📊 OpenBB Powered Dynamic DCF Dashboard")
+st.title("Dynamic Company Comparison Dashboard")
 
-st.markdown("This dashboard connects to OpenBB API to fetch financial data.")
+col1, col2 = st.columns(2)
 
-# -----------------------
-# USER INPUT
-# -----------------------
+with col1:
+    ticker1 = st.text_input("Company A", "TCS.NS")
 
-ticker = st.text_input("Enter Stock Ticker (Example: AAPL or INFY.NS)", "AAPL")
-
-# -----------------------
-# FETCH DATA USING OPENBB
-# -----------------------
+with col2:
+    ticker2 = st.text_input("Company B", "INFY.NS")
 
 @st.cache_data
 def fetch_data(ticker):
-    income = obb.equity.fundamental.income(ticker)
-    cashflow = obb.equity.fundamental.cash(ticker)
-    info = obb.equity.fundamental.info(ticker)
-    price = yf.Ticker(ticker).history(period="5y")
-    return income, cashflow, info, price
+    stock = yf.Ticker(ticker)
+    info = stock.info
+    hist = stock.history(period="1y")
+    return info, hist
 
 try:
-    income, cashflow, info, price = fetch_data(ticker)
+    info1, hist1 = fetch_data(ticker1)
+    info2, hist2 = fetch_data(ticker2)
 
-    # -----------------------
-    # PRICE CHART
-    # -----------------------
+    st.subheader("1-Year Price Comparison")
 
-    st.subheader("📈 Stock Price (5Y)")
-    fig_price = px.line(price, x=price.index, y="Close")
-    st.plotly_chart(fig_price, use_container_width=True)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=hist1.index, y=hist1["Close"], name=ticker1))
+    fig.add_trace(go.Scatter(x=hist2.index, y=hist2["Close"], name=ticker2))
+    st.plotly_chart(fig)
 
-    # -----------------------
-    # FINANCIAL DATA
-    # -----------------------
+    st.subheader("Valuation Metrics")
 
-    fcf_series = cashflow["freeCashFlow"].dropna()
+    df = pd.DataFrame({
+        "Metric": ["P/E", "P/B", "ROE"],
+        ticker1: [
+            info1.get("trailingPE"),
+            info1.get("priceToBook"),
+            info1.get("returnOnEquity")
+        ],
+        ticker2: [
+            info2.get("trailingPE"),
+            info2.get("priceToBook"),
+            info2.get("returnOnEquity")
+        ]
+    })
 
-    if len(fcf_series) == 0:
-        st.error("Free Cash Flow data not available.")
-        st.stop()
+    st.dataframe(df)
 
-    latest_fcf = fcf_series.iloc[0]
-    shares = info.get("sharesOutstanding", None)
-    current_price = price["Close"].iloc[-1]
-
-    st.subheader("💰 Free Cash Flow Trend")
-    fig_fcf = px.bar(fcf_series)
-    st.plotly_chart(fig_fcf, use_container_width=True)
-
-    # -----------------------
-    # DCF ASSUMPTIONS
-    # -----------------------
-
-    st.sidebar.header("DCF Assumptions")
-
-    growth = st.sidebar.slider("FCF Growth %", 0.0, 20.0, 8.0) / 100
-    wacc = st.sidebar.slider("WACC %", 5.0, 15.0, 10.0) / 100
-    terminal_growth = st.sidebar.slider("Terminal Growth %", 1.0, 5.0, 3.0) / 100
-
-    years = 5
-
-    projected_fcf = []
-    for year in range(1, years + 1):
-        projected = latest_fcf * (1 + growth) ** year
-        projected_fcf.append(projected)
-
-    discounted = [
-        projected_fcf[i] / ((1 + wacc) ** (i + 1))
-        for i in range(years)
-    ]
-
-    terminal_value = (
-        projected_fcf[-1] * (1 + terminal_growth)
-    ) / (wacc - terminal_growth)
-
-    discounted_terminal = terminal_value / ((1 + wacc) ** years)
-
-    intrinsic_value = sum(discounted) + discounted_terminal
-
-    if shares:
-        intrinsic_per_share = intrinsic_value / shares
-
-        # -----------------------
-        # RESULTS
-        # -----------------------
-
-        st.subheader("📌 Valuation Summary")
-
-        col1, col2 = st.columns(2)
-        col1.metric("Current Price", f"${current_price:.2f}")
-        col2.metric("Intrinsic Value", f"${intrinsic_per_share:.2f}")
-
-        if intrinsic_per_share > current_price:
-            st.success("Stock appears Undervalued")
-        else:
-            st.error("Stock appears Overvalued")
-    else:
-        st.warning("Shares outstanding data not available.")
-
-except Exception as e:
-    st.error("Error fetching data. Please check ticker symbol.")
+except:
+    st.error("Invalid ticker or data unavailable.")
