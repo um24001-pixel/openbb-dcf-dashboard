@@ -50,7 +50,7 @@ def fetch_data(ticker, period):
 # -------------------------
 try:
     info_asian, hist_asian = fetch_data("ASIANPAINT.NS", timeframe)
-    info_akzo, hist_akzo = fetch_data("AKZOY.NS", timeframe)
+    info_akzo, hist_akzo = fetch_data("AKZA.AS", timeframe)
 
     # -------------------------
     # Normalized Price Comparison
