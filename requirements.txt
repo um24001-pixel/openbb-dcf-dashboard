@@ -1,7 +1,4 @@
 streamlit
-openbb-core
-openbb-equity
-openbb-yfinance
 yfinance
 pandas
 numpy
