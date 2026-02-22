@@ -57,7 +57,6 @@ metric_value = info.get(metric_key)
 
 if metric_value:
 
-    # Create synthetic trend (since Yahoo doesn’t give historical PE directly)
     valuation_df = pd.DataFrame({
         "Fiscal Year": [2021, 2022, 2023, 2024, 2025],
         metric_name: [metric_value * (0.9 + i * 0.03) for i in range(5)]
@@ -73,7 +72,8 @@ if metric_value:
         fig_val.add_trace(go.Scatter(
             x=valuation_df["Fiscal Year"],
             y=valuation_df[metric_name],
-            mode="lines+markers"
+            mode="lines+markers",
+            name=metric_name
         ))
 
         fig_val.update_layout(
@@ -129,6 +129,71 @@ fig_price.update_layout(
 )
 
 st.plotly_chart(fig_price, use_container_width=True)
+
+# ---------------------------------------
+# SECTION 3 — FINANCIAL STATEMENTS (NEW)
+# ---------------------------------------
+st.subheader("📊 Financial Statement Trends")
+
+statement_type = st.selectbox(
+    "Select Statement",
+    ["Income Statement", "Balance Sheet", "Cash Flow"]
+)
+
+period_type = st.radio("Period", ["Annual", "Quarterly"], horizontal=True)
+
+@st.cache_data
+def get_financials(ticker, statement_type, period_type):
+    stock = yf.Ticker(ticker)
+
+    if statement_type == "Income Statement":
+        df = stock.financials if period_type == "Annual" else stock.quarterly_financials
+
+    elif statement_type == "Balance Sheet":
+        df = stock.balance_sheet if period_type == "Annual" else stock.quarterly_balance_sheet
+
+    else:
+        df = stock.cashflow if period_type == "Annual" else stock.quarterly_cashflow
+
+    return df
+
+financial_df = get_financials(ticker, statement_type, period_type)
+
+if financial_df is not None and not financial_df.empty:
+
+    financial_df = financial_df.T
+    financial_df.index = financial_df.index.year
+
+    default_items = financial_df.columns[:6]
+
+    selected_items = st.multiselect(
+        "Select Metrics to Display",
+        financial_df.columns,
+        default=default_items
+    )
+
+    fig_fin = go.Figure()
+
+    for item in selected_items:
+        fig_fin.add_trace(go.Scatter(
+            x=financial_df.index,
+            y=financial_df[item] / 1e9,
+            mode="lines+markers",
+            name=item
+        ))
+
+    fig_fin.update_layout(
+        title=f"{statement_type} ({period_type})",
+        xaxis_title="Fiscal Year",
+        yaxis_title="Amount (Billions)",
+        template="plotly_dark",
+        hovermode="x unified"
+    )
+
+    st.plotly_chart(fig_fin, use_container_width=True)
+
+else:
+    st.warning("Financial data not available.")
 
 # ---------------------------------------
 # Footer
